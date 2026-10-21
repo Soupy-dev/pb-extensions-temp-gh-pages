@@ -43,7 +43,7 @@ function resolveBaseURL() {
 const REPO_NAME = process.env.SITE_REPO_NAME ?? "Soupy Paperback Extensions";
 const REPO_DESC =
   process.env.SITE_REPO_DESC ??
-  "Maintained builds of the Kagane and ComixTo extensions for Paperback 0.8.";
+  "Personal builds of the Kagane and ComixTo extensions for Paperback 0.8. Not for public use.";
 const baseURL = resolveBaseURL();
 
 function readSources(versioningPath) {
@@ -173,10 +173,12 @@ footer a{color:var(--dim)}
   <div class="grid">${cards}
   </div>
 
-  <p class="note">Open this page on a device with Paperback installed and tap
-  <strong>Add to Paperback</strong>, or paste the base URL above into
-  Settings → Extensions → add a repository. If you already had the older
-  Kagane or ComixTo repositories added, remove them so updates come from here.</p>
+  <p class="note">Personal-use repository: please don't add it to your own Paperback.
+  These builds aren't maintained by the original authors and may break or be
+  removed at any time. On my own devices, tap <strong>Add to Paperback</strong>,
+  or paste the base URL above into Settings → Extensions → add a repository.
+  If the older Kagane or ComixTo repositories are still added, remove them so
+  updates come from here.</p>
 
   <footer>Paperback 0.8 · built ${esc(new Date().toISOString().slice(0, 10))}</footer>
 </div>
