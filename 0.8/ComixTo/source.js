@@ -1268,12 +1268,20 @@ var _Sources = (() => {
     return fastGenerateHash(rawPath);
   }
   function signUrl(url) {
-    const path = url.replace("https://comix.to/api/v1", "").split("?")[0];
+    const qIdx = url.indexOf("?");
+    const base = qIdx < 0 ? url : url.slice(0, qIdx);
+    const path = base.replace("https://comix.to/api/v1", "");
     if (!isSignedPath(path)) return url;
     const token = generateHash(url);
     if (!token) return url;
-    const sep = url.includes("?") ? "&" : "?";
-    return `${url}${sep}_=${token}`;
+    // Send the exact canonical query string that was signed. The server validates
+    // the token against the canonical form (keys sorted, array params rendered as
+    // foo[0]=a&foo[1]=b) and does NOT re-expand the raw foo[]=a&foo[]=b shape, so a
+    // request that signs the canonical form but sends the raw form is rejected as
+    // invalid_token (this is what broke manga details and tag-filtered search).
+    if (qIdx < 0) return `${base}?_=${token}`;
+    const canonical = canonicalizeQuery(url.slice(qIdx + 1));
+    return canonical ? `${base}?${canonical}&_=${token}` : `${base}?_=${token}`;
   }
   var comixQueue = Promise.resolve();
   function scheduleComix(requestManager, request) {
@@ -2103,7 +2111,7 @@ var _Sources = (() => {
     return /^https?:\/\/([^/]+\.)?comix\.to(\/|$|\?|#)/i.test(url ?? "");
   }
   var ComixToInfo = {
-    version: "1.9.30",
+    version: "1.9.31",
     name: "ComixTo",
     icon: "icon.png",
     author: "acepilot147",
