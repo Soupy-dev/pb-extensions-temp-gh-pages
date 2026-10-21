@@ -1207,68 +1207,6 @@ var _Sources = (() => {
     return parsed && typeof parsed === "object" && parsed.status === "ok" && "result" in parsed ? parsed.result : parsed;
   }
 
-  // src/ComixTo/DebugLog.ts
-  var LOCAL_LOG_URL = "";
-  var DEBUG = LOCAL_LOG_URL !== "";
-  var _rm = null;
-  function getRM() {
-    if (!_rm) {
-      _rm = App.createRequestManager({ requestsPerSecond: 20, requestTimeout: 3e3 });
-    }
-    return _rm;
-  }
-  function debugLog(tag, data) {
-    if (!LOCAL_LOG_URL) return;
-    try {
-      const payload = JSON.stringify({ tag, t: Date.now(), ...data ?? {} });
-      const req = App.createRequest({
-        url: LOCAL_LOG_URL,
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        data: payload
-      });
-      void getRM().schedule(req, 1).catch(() => {
-      });
-    } catch {
-    }
-  }
-
-  // src/ComixTo/Telemetry.ts
-  var TELEMETRY_URL = "https://telemetry.comix-ext.workers.dev/log";
-  var TELEMETRY_KEY = "comix-telemetry-key-Y29taXh0ZWxlbWV0cnljb2RlMTQ3";
-  var _rm2 = null;
-  var _seq = 0;
-  function getRM2() {
-    if (!_rm2) {
-      _rm2 = App.createRequestManager({ requestsPerSecond: 20, requestTimeout: 3e3 });
-    }
-    return _rm2;
-  }
-  function hashPath(path) {
-    let h = 2166136261;
-    for (let i = 0; i < path.length; i++) {
-      h ^= path.charCodeAt(i);
-      h = Math.imul(h, 16777619) >>> 0;
-    }
-    return h.toString(16).padStart(8, "0");
-  }
-  function emit(event) {
-    if (DEBUG) debugLog("req", event);
-    if (!TELEMETRY_URL) return;
-    try {
-      const full = { seq: ++_seq, ts: Date.now(), ...event, path: hashPath(event.path) };
-      const req = App.createRequest({
-        url: TELEMETRY_URL,
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Tel-Key": TELEMETRY_KEY },
-        data: JSON.stringify(full)
-      });
-      void getRM2().schedule(req, 1).catch(() => {
-      });
-    } catch {
-    }
-  }
-
   // src/ComixTo/ComixHash.ts
   var SIGNED_PATTERNS = [
     /^\/manga(?:\/|$)/,
@@ -1441,14 +1379,10 @@ var _Sources = (() => {
       throw new Error(`Cloudflare challenge page returned [${ctx}]`);
     }
   }
-  function decodeComixResponse(apiPath, response, timing) {
-    const parseStart = Date.now();
+  function decodeComixResponse(apiPath, response) {
     const json = JSON.parse(response.data ?? "{}");
-    if (timing) timing.parseMs = Date.now() - parseStart;
     if (json && typeof json === "object" && "e" in json) {
-      const decryptStart = Date.now();
       const decrypted = fastDecryptComixPayload(apiPath, json, response.headers ?? {});
-      if (timing) timing.decryptMs = Date.now() - decryptStart;
       return decrypted && typeof decrypted === "object" && "result" in decrypted && decrypted.status === "ok" ? decrypted.result : decrypted;
     }
     if (json.status !== "ok") {
@@ -1457,28 +1391,10 @@ var _Sources = (() => {
     return json.result;
   }
   async function fetchSigned(requestManager, fullUrl) {
-    const totalStart = Date.now();
     const apiPath = fullUrl.replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v1/, "");
-    const telPath = apiPath.split("?")[0];
-    const label = /^\/manga\/[^/]+\/chapters/.test(telPath) ? "chapters" : /^\/chapters\//.test(telPath) ? "chapter_images" : "signed_fetch";
-    const signStart = Date.now();
-    const signedUrl = signUrl(fullUrl);
-    const signMs = Date.now() - signStart;
-    const fetchStart = Date.now();
-    const response = await requestSignedUrl(requestManager, signedUrl);
-    const fetchMs = Date.now() - fetchStart;
-    const status = response.status;
-    const bytes = (response.data ?? "").length;
-    try {
-      checkSignedResponseError(response, requestManager);
-    } catch (err) {
-      emit({ label, path: telPath, status, bytes, signMs, fetchMs, parseMs: 0, decryptMs: 0, totalMs: Date.now() - totalStart });
-      throw err;
-    }
-    const timing = { parseMs: 0, decryptMs: 0 };
-    const result = decodeComixResponse(apiPath, response, timing);
-    emit({ label, path: telPath, status, bytes, signMs, fetchMs, parseMs: timing.parseMs, decryptMs: timing.decryptMs, totalMs: Date.now() - totalStart });
-    return result;
+    const response = await requestSignedUrl(requestManager, signUrl(fullUrl));
+    checkSignedResponseError(response, requestManager);
+    return decodeComixResponse(apiPath, response);
   }
 
   // src/ComixTo/Settings.ts
@@ -2191,10 +2107,6 @@ var _Sources = (() => {
   }
 
   // src/ComixTo/ComixTo.ts
-  function isImageRequestUrl(url) {
-    if (!url) return false;
-    return /\.(webp|png|jpe?g|avif)(\?|#|$)/i.test(url) || /wowpic\d*\.|\/h?s?i+\d*\//i.test(url);
-  }
   function isComixUrl(url) {
     return /^https?:\/\/([^/]+\.)?comix\.to(\/|$|\?|#)/i.test(url ?? "");
   }
@@ -2233,9 +2145,6 @@ var _Sources = (() => {
             if (isComixUrl(request.url)) headers["Referer"] = `${DOMAIN}/`;
             else delete headers["Referer"];
             request.headers = headers;
-            if (DEBUG && isImageRequestUrl(request.url)) {
-              debugLog("img_req", { url: request.url, headerKeys: Object.keys(request.headers ?? {}), origin: request.headers?.["Origin"] ?? request.headers?.["origin"] ?? null });
-            }
             return request;
           },
           interceptResponse: async (response) => {
@@ -2274,9 +2183,7 @@ var _Sources = (() => {
                     response.headers["Content-Type"] = outMime;
                   }
                 }
-                if (DEBUG) debugLog("img_descramble", { seed, effSeed, seedHashXor, cols, rows, algo, width, height, encoded: !!encoded });
               } catch (error) {
-                if (DEBUG) debugLog("img_descramble_error", { error: error?.message ?? String(error) });
                 console.log(`[ComixTo] descramble error: ${error?.message ?? String(error)}`);
               }
               return response;
@@ -2285,13 +2192,8 @@ var _Sources = (() => {
             if (!enc) return response;
             try {
               const bytes = App.createByteArray(response.rawData);
-              const handled = decryptComixImageByParams(bytes, enc);
-              if (DEBUG) {
-                const riff = bytes[0] === 82 && bytes[1] === 73 && bytes[2] === 70 && bytes[3] === 70;
-                debugLog("img_decrypt", { seed: enc.seed, len: enc.len, algo: enc.algo, handled, total: bytes.length, riff });
-              }
+              decryptComixImageByParams(bytes, enc);
             } catch (error) {
-              if (DEBUG) debugLog("img_decrypt_error", { error: error?.message ?? String(error) });
               console.log(`[ComixTo] image decrypt error: ${error?.message ?? String(error)}`);
             }
             return response;
@@ -2354,20 +2256,11 @@ var _Sources = (() => {
      * comix flips encryption on per-endpoint, so no caller may assume plaintext.
      */
     async fetchTimed(label, url) {
-      const t0 = Date.now();
       const signedUrl = signUrl(url);
-      const signMs = Date.now() - t0;
       const apiPath = signedUrl.replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v1/, "");
-      const path = apiPath.split("?")[0];
-      const request = App.createRequest({ url: signedUrl, method: "GET" });
-      const fetchStart = Date.now();
-      const response = await scheduleComix(this.requestManager, request);
-      const fetchMs = Date.now() - fetchStart;
+      const response = await scheduleComix(this.requestManager, App.createRequest({ url: signedUrl, method: "GET" }));
       this.checkResponseError(response);
-      const timing = { parseMs: 0, decryptMs: 0 };
-      const result = decodeComixResponse(apiPath, response, timing);
-      emit({ label, path, status: response.status, bytes: (response.data ?? "").length, signMs, fetchMs, parseMs: timing.parseMs, decryptMs: timing.decryptMs, totalMs: Date.now() - t0 });
-      return result;
+      return decodeComixResponse(apiPath, response);
     }
     async getMangaDetails(mangaId) {
       const result = await this.fetchTimed(
