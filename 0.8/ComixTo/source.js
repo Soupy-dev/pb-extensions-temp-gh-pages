@@ -923,10 +923,10 @@ var _Sources = (() => {
 
   // src/ComixTo/ComixFastSigner.ts
   var B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  var TOKEN_PREFIX = "s8c.";
+  var TOKEN_PREFIX = "rxh.";
   var MAC_BYTES = 12;
-  var ISTATE = [3676977656, 2784781343, 4169195246, 809150785, 1669043339, 1707962206, 1928564201, 2931198242];
-  var OSTATE = [3894100698, 1980343580, 2851411591, 2887469839, 2871040717, 2565674619, 2756198538, 2833082117];
+  var ISTATE = [1906290959, 2559894265, 4259719503, 1418033579, 4016805576, 3693777923, 2673508537, 645235205];
+  var OSTATE = [3171608888, 770522156, 3481722545, 809922512, 4091229127, 1389472250, 3610438218, 692241946];
   var SHA256_K = [
     1116352408,
     1899447441,
@@ -1159,8 +1159,96 @@ var _Sources = (() => {
     return out;
   }
   var X_ENC = "2";
-  var KEY_B64 = "njeXaAa1c7M2hDKUDyjE728y+HfGnTN28eCc3/vQF+tlFq8dvFI0BIAy+L83Z8cZK+D9t2fZAf6gQDyigKg3w/FMOZJ4KGbs3O99hVA9YS+JS4VdE8dq6xiQ0AYkZIOIkfY48xe7Mrqe3CmVt70qdYeIA/vI8AWUyNAWItQAg8G7rO7RGoii9XpAVz/jJzTNgBb7+RhMiDgziS6tn/FbIzajW+ElXWb0CXAiua7iZqJJZMuV9ipRvcnwSSW01skh7PRm8aLI8Q7ngRxN2IBgw17NE2UAcH/A36usf+gVQsj4CKCafYlHzvNTMxr29AcV2BXtD7bYs5TpTc370dpWawBL9oJBKGwbIN4yn77CslrfEDD87iELGptkBp9Sn+J6eLJlkllODWgrPUvsrJhGEU8IrcTzWUJ/8Ft37mXUYEbrsh3dEyPhm2D048Ex/2jeH03PF/q9L7QT0z9t7vXSRzp5iwCV8w60NuSSUrf8fZ3ENX5pNobr0gYs3oX7ZxwPuceZacRW3df91Yke1JUCQb49l5CE1Rk7S9ciD+K7PdvPrCiHMh2HjARzYt+eRJ1XFlJCyQhJFFIWnfjpCzBY1D81E3n7Uyy2H2AojVfHUhchFPBa/k4QtYfhhmcOfhSaffWRWGUj30KoB8XH2R9Fwfq4UgKOzVLWRIMhK/BDwrSlROBE7cZQ+ZhtsRT9bldLdkyIRSBIC6E0wyB5YWoJ1DrB72ZGGQFnK4OSmE0s9rd2OV2pVtzQNctxxA2jKtHDNBY8W018a8Cy35MZVsZOWjPOGLvmHzEmzFkKqXgHxkoU8Ufn1C5/CGB9RpaE+ZwOnytEQ80Rs6pMutNx/DmXRM4GBHuO7ayfj63wDOp0VESMrq7B2A8tOGIudYeH2h0ksSOuKUK1QkujPST/4LaV8s8scQrLfk+xJNnCwP6L3kwqFkFOVhsHAhMVgrzecEESrNf/msYsvhNQRYFgwdOibKOBc9b0KHOuIR0XhTAvLBoaebieaIUP6X8HnGvTKsRgpp1niRI1mcNdkuvT/FXf17eN3urrIckr0m9ksHzQodwfEZoP+JWZIgeLkPIBXZqp/M7SgbZX3tQLXNG+nnwSW/7UvYqFXMMZXVb4guS223qMBIzB/NjvvQaK5wpSHdNSK84MvVsnQKJH+WGnhkNb0atxb/ZBChmo4TKTZ8Q6MR9K0EQH6FS1HfqAnCNPg9A/u/PZZhuZCbFXwICAiaeSXTdR5xwoNDQr5TIWvArPAq5V9ly+MOtZ3ebBBoVnWwO/OrTmtQ9K86+V9R1t3WzXry2nppPdNbS9v8zTYZKGpvwJ1TjXb6fAkSUK1POAxa+XTtrrkfcUec4RDzWV0WbNew==";
+  var KEY_B64 = "MOXMIcKFADNZqY7KjodZskg92Fem4mw4bNYpvl+5pzroNhgr8VPuwF2Clah0RSyi68sATos0B8iAv0NgYU3EM0rxXlU8TxxzdU1Ela59mxxcaBhTrL7amQnmGTDt72CbJBWmxCjkSnDqoWOpkwn1rmxxjVLAikY7QnECHrTlX41H9XQkhhudl0PDEmP1ATE+6Ro/o+zH87QzooW1ZKxtucZBSKR7sJB9i4zRmOKThO8lARWdMouIdTxOGEirFh91mOE5XYQDNY5Cn7EmcRHBVxoKtrbjWEtUj8mCZbZcXiJLpdjjk4K+4+YUPuz9pem33lyKl86Blgo2IdHXgPVVu9wE8eYLsOjmtVOPkBjiKG0Ud2UytgXbSs5rLB8+8HKc4k2PkI3OCa5CHCmSQjTgrcrRtSLnyzOExC/R0T/astBX8n4hNkP0O2h1tvCkpHnXwm9kGG+dtWL0evA6ytSgMeEnqZiR9NAQV8Q/UI81el6miFZFHnWLFDG+HHFVV24BWTGp0EmQDa8/us9QxgvglzEJZleJqfKpuLEohnPXOXZQZKBMH3QqC6m6quikK1UVXtCHlIZ4u0FNPhmq6oXI5V89fQ0lAOZdtGeflRf0jOAjXvAzDyxFmhAxl8Nm+QiaT2vaOkLGG6nlngn5gyo8HZd5kaQGZZSvpWdjU41Q+Q127BWUg9e0JeX7B05QUsDsMEW27vReHPX8zg0ZRvRe3+PF/EqI6fVF0oCl2foC3XuFw9Mj1dwvEBjIz/Ak2t3zwUckApUV9s8ExojwxIVCWN1KkHRumC564hTOJXfNgV6hwCQwOaY9NMXHurRfqHI1NULa3WEbT+d3+mAKH4oHWLPfK+Xt9rkcfl+uvXhv6FRIOvYaMFhFWfAKiA4Oi/8caO68nImGtgNng8/siXzidPhgPwIqs/7FjidX5VyTKR3fKjz+YwfGIITthH4/DcQJmejdLHrtOvAZky8VJSkFRhuVGdjBNXZ9psJw6/mNd4QoJy8gFVeHVzVQoj36VauYysmWiiDB3dPmGlFYxc09TjxYIDYaOlW7zUksIFE3A7rsvfWfZo/KG0SsJFHyHszpZ3ofbidiBm6M+ATGYL9zxP6qBOpcxZgY5c+gPNOz89FFNzLrmOZLY2StseJZkA6WYQ53sjUdAwZYXeFYEVz4S0CQbzhAYm+sUbNdRFBTyAvYB4vetvYYBvwRmgB9YUq9b2U0Sqh42ZBqd1hi1Cmtg69Rtr55dJXJuHKZs8DvHxRvS+R+qDuWOfX+7vgQfgQpOUWXCZcjpO2jJqiARrOOMz15oVYENt3XdbFJR2cOD97EKoyH24mwOeAEYXVt1Guzd6ZY5HtNArO3CYqim5GwjA==";
   var KEY = null;
+  // The signer constants above belong to one comix build (tn8nzl). comix rebuilds its
+  // signer about every 14 hours and retires old keys, so newer constants are fetched at
+  // runtime (see loadSignerKeys); these stay as the fallback.
+  var SIGNER_BUILD = "tn8nzl";
+  function applySignerKeys(k) {
+    const words = (a) => Array.isArray(a) && a.length === 8 && a.every((n) => Number.isInteger(n) && n >= 0 && n <= 4294967295);
+    if (!k || typeof k.prefix !== "string" || !/^[A-Za-z0-9]{2,8}\.$/.test(k.prefix)) return false;
+    if (!words(k.istate) || !words(k.ostate) || typeof k.key !== "string" || k.key.length < 64) return false;
+    if (k.xEnc !== void 0 && String(k.xEnc) !== X_ENC) return false;
+    TOKEN_PREFIX = k.prefix;
+    ISTATE = k.istate;
+    OSTATE = k.ostate;
+    KEY_B64 = k.key;
+    KEY = null;
+    if (typeof k.build === "string") SIGNER_BUILD = k.build;
+    return true;
+  }
+  // Newer constants are published next to this extension (tools/comix-keys extracts them
+  // from comix's own module on a schedule and the Pages deploy serves the result), so a
+  // key rotation on the site does not need a new extension build. Only strictly newer
+  // builds are adopted, and the baked-in constants stay as the fallback.
+  var COMIX_KEYS_URL = "https://soupy-dev.github.io/pb-extensions-temp-gh-pages/comix-keys.json";
+  var SIGNER_KEYS_STORE = "comix_signer_keys_v1";
+  var SIGNER_KEYS_TTL_MS = 30 * 60 * 1e3;
+  var SIGNER_KEYS_FORCE_GAP_MS = 2 * 60 * 1e3;
+  var keyStateManager = null;
+  var keysRequestManager = null;
+  var signerKeysLoad = null;
+  var signerKeysNextCheck = 0;
+  var signerKeysSavedAt = 0;
+  var signerKeysRestored = false;
+  var signerKeysForcedAt = 0;
+  function signerBuildNumber(build) {
+    const n = parseInt(String(build ?? ""), 36);
+    return Number.isNaN(n) ? 0 : n;
+  }
+  function adoptSignerKeys(k) {
+    if (!k || signerBuildNumber(k.build) <= signerBuildNumber(SIGNER_BUILD)) return false;
+    return applySignerKeys(k);
+  }
+  async function refreshSignerKeys(force) {
+    let changed = false;
+    if (keyStateManager && !signerKeysRestored) {
+      signerKeysRestored = true;
+      try {
+        const saved = JSON.parse(await keyStateManager.retrieve(SIGNER_KEYS_STORE) ?? "null");
+        if (saved && adoptSignerKeys(saved.keys)) changed = true;
+        signerKeysSavedAt = saved?.at ?? 0;
+      } catch {
+      }
+    }
+    if (!force && Date.now() - signerKeysSavedAt < SIGNER_KEYS_TTL_MS) return changed;
+    try {
+      if (!keysRequestManager) keysRequestManager = App.createRequestManager({ requestsPerSecond: 2, requestTimeout: 5e3 });
+      const res = await keysRequestManager.schedule(App.createRequest({ url: `${COMIX_KEYS_URL}?t=${Date.now()}`, method: "GET" }), 1);
+      if (res.status === 200) {
+        const keys = JSON.parse(res.data ?? "null");
+        if (adoptSignerKeys(keys)) changed = true;
+        signerKeysSavedAt = Date.now();
+        if (keyStateManager) await keyStateManager.store(SIGNER_KEYS_STORE, JSON.stringify({ at: signerKeysSavedAt, keys }));
+      }
+    } catch {
+    }
+    return changed;
+  }
+  function loadSignerKeys() {
+    if (!signerKeysLoad || Date.now() >= signerKeysNextCheck) {
+      signerKeysNextCheck = Date.now() + SIGNER_KEYS_TTL_MS;
+      signerKeysLoad = refreshSignerKeys(false).catch(() => false);
+    }
+    return signerKeysLoad;
+  }
+  // After comix rejects a signature: look for newer published keys right away (at most
+  // once every couple of minutes). True when the keys changed and a retry is worthwhile.
+  async function refreshSignerKeysNow() {
+    if (Date.now() - signerKeysForcedAt < SIGNER_KEYS_FORCE_GAP_MS) return false;
+    signerKeysForcedAt = Date.now();
+    return refreshSignerKeys(true).catch(() => false);
+  }
+  function signatureRejected(response) {
+    return response.status === 403 && /key_retired|invalid_token/.test(response.data ?? "");
+  }
+  async function sendSigned(fullUrl, send) {
+    await loadSignerKeys();
+    let response = await send(signUrl(fullUrl));
+    if (signatureRejected(response) && await refreshSignerKeysNow()) response = await send(signUrl(fullUrl));
+    return response;
+  }
   function utf8Decode(bytes) {
     let out = "";
     let i = 0;
@@ -1392,7 +1480,7 @@ var _Sources = (() => {
   }
   async function fetchSigned(requestManager, fullUrl) {
     const apiPath = fullUrl.replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v1/, "");
-    const response = await requestSignedUrl(requestManager, signUrl(fullUrl));
+    const response = await sendSigned(fullUrl, (u) => requestSignedUrl(requestManager, u));
     checkSignedResponseError(response, requestManager);
     return decodeComixResponse(apiPath, response);
   }
@@ -2132,6 +2220,7 @@ var _Sources = (() => {
       super(...arguments);
       this.parser = new Parser();
       this.stateManager = App.createSourceStateManager();
+      keyStateManager = this.stateManager;
       this.requestManager = App.createRequestManager({
         requestsPerSecond: 4,
         requestTimeout: 15e3,
@@ -2256,9 +2345,8 @@ var _Sources = (() => {
      * comix flips encryption on per-endpoint, so no caller may assume plaintext.
      */
     async fetchTimed(label, url) {
-      const signedUrl = signUrl(url);
-      const apiPath = signedUrl.replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v1/, "");
-      const response = await scheduleComix(this.requestManager, App.createRequest({ url: signedUrl, method: "GET" }));
+      const apiPath = url.replace(/^https?:\/\/[^/]+/, "").replace(/^\/api\/v1/, "");
+      const response = await sendSigned(url, (u) => scheduleComix(this.requestManager, App.createRequest({ url: u, method: "GET" })));
       this.checkResponseError(response);
       return decodeComixResponse(apiPath, response);
     }

@@ -1,0 +1,9 @@
+{
+  "name": "comix-keys",
+  "private": true,
+  "type": "module",
+  "description": "Extracts comix.to's current request-signing constants and response key so the ComixTo extension can follow the site's key rotation.",
+  "dependencies": {
+    "puppeteer-core": "^24.43.1"
+  }
+}

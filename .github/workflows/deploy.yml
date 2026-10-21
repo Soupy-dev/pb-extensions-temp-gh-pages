@@ -2,12 +2,19 @@ name: Build and deploy extensions
 
 # Builds Kagane from its TypeScript source, assembles the combined Paperback
 # repository (Kagane + ComixTo) with tools/build-site.mjs, and publishes it to
-# GitHub Pages. Runs on every push to main and can be triggered by hand.
+# GitHub Pages. Runs on every push to main, can be triggered by hand, and runs
+# hourly to follow comix.to's signer rotation: comix rebuilds its request-signing
+# module about every 14 hours and retires old keys after roughly one generation, so the
+# `keys` job extracts the current constants (tools/comix-keys) and the deploy publishes
+# them as comix-keys.json, which the ComixTo extension fetches at runtime. Scheduled
+# runs only rebuild and redeploy when a new comix build was extracted.
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: "13 * * * *"
 
 permissions:
   contents: read
@@ -20,7 +27,52 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  keys:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.select.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tools/comix-keys/package-lock.json
+
+      - name: Install extractor
+        working-directory: tools/comix-keys
+        run: npm ci --no-audit --no-fund
+
+      - name: Fetch the keys that are already published
+        run: |
+          owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          repo="${GITHUB_REPOSITORY#*/}"
+          curl -fsS --max-time 30 "https://${owner}.github.io/${repo}/comix-keys.json" -o published.json || echo '{}' > published.json
+
+      # Not fatal: if comix blocks this runner or changes the module's layout the
+      # published keys are kept and the failure is visible in this step's log.
+      - name: Extract the current signer constants
+        id: extract
+        continue-on-error: true
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node tools/comix-keys/extract.mjs --out extracted.json
+
+      - name: Choose what to publish
+        id: select
+        run: node tools/comix-keys/select.mjs --published published.json --extracted extracted.json --out keys/comix-keys.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: comix-keys
+          path: keys/comix-keys.json
+          if-no-files-found: ignore
+
   build:
+    needs: keys
+    # Keys are best-effort: a failed `keys` job must not block a push deploy.
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.keys.outputs.changed == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +89,15 @@ jobs:
           npm ci
           npx paperback bundle
 
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: comix-keys
+          path: keys
+
       - name: Assemble combined repository
+        env:
+          COMIX_KEYS_FILE: keys/comix-keys.json
         run: node tools/build-site.mjs
 
       - uses: actions/upload-pages-artifact@v3

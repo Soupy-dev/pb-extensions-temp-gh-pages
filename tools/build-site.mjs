@@ -14,7 +14,7 @@
 //   (cd kitty-extensions-0.8-temp-main && npm ci && npx paperback bundle)
 //   node tools/build-site.mjs
 //   npx serve _site        # optional preview
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -73,6 +73,17 @@ const versioning = {
   builtWith: kagane.data.builtWith ?? comix.data.builtWith ?? { toolchain: "0.8.7", types: "0.8.7" },
 };
 writeFileSync(join(OUT, "versioning.json"), JSON.stringify(versioning));
+
+// ComixTo follows comix's signer rotation by fetching this file at runtime (see
+// tools/comix-keys). CI extracts it ahead of the build and points COMIX_KEYS_FILE at it;
+// without one the extension simply keeps the constants baked into its bundle.
+const comixKeys = process.env.COMIX_KEYS_FILE;
+if (comixKeys && existsSync(comixKeys)) {
+  cpSync(comixKeys, join(OUT, "comix-keys.json"));
+  console.log(`comix-keys.json: build ${JSON.parse(readFileSync(comixKeys, "utf8")).build}`);
+} else {
+  console.log("comix-keys.json: none (extension uses its baked-in constants)");
+}
 
 // --- Landing page -----------------------------------------------------------
 const esc = (v) =>

@@ -63,6 +63,24 @@ chapter-list traffic no real reader produces. `GET /manga/{id}/chapters` must us
 `getChapters` therefore pages within that budget and keeps a per-title cache, so a very
 long series fills in over a few opens instead of tripping the block.
 
+ComixTo signing keys: comix.to rebuilds its request-signing script about every 14
+hours with a new token prefix, HMAC key and response key, and answers `403 key_retired`
+for keys more than about one generation old. `tools/comix-keys/extract.mjs` recovers the
+current constants from the site's own script (it runs the script in headless Chromium and
+proves the result against the script's output before accepting it), the workflow runs it
+hourly, and the deploy publishes `comix-keys.json` next to the extensions. ComixTo fetches
+that file at runtime and adopts it when its build is newer than the constants baked into
+the bundle, so a rotation needs no extension update. To run it by hand (needs
+Chrome/Chromium/Edge; set `CHROME_PATH` if it is not found):
+
+```sh
+(cd tools/comix-keys && npm ci && node extract.mjs --out comix-keys.json)
+```
+
+If extraction ever fails (comix blocking the runner, or the script's layout changing) the
+last published keys stay in place; refresh the baked-in constants in
+`0.8/ComixTo/source.js` from the tool's output when you next touch the bundle.
+
 Build and preview locally:
 
 ```sh
