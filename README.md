@@ -1,3 +1,25 @@
+PLEASE DO NOT ADD THIS REPOSITORY TO YOUR OWN PAPERBACK INSTALLATION. It is a temporary repository for personal use only. The extensions are not maintained by the original authors, and may break or be removed at any time. I was just tired of the original extensions breaking and wanted to keep them working for myself. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Soupy Paperback Extensions
 
 Maintained builds of two **Paperback 0.8** extensions — **Kagane** and
@@ -26,9 +48,7 @@ The `Add to Paperback` button uses this link, if you want to trigger it manually
 paperback://addRepo?displayName=Soupy%20Paperback%20Extensions&url=https%3A%2F%2Fsoupy-dev.github.io%2Fpb-extensions-temp-gh-pages
 ```
 
-> **Already had the old repos?** If you previously added kittycatgit's Kagane
-> repository or acepilot147's ComixTo repository, remove them in
-> **Settings → Extensions** so updates come from here instead.
+This is for personal use, don't add to your own paperback. The extensions are not maintained by the original authors, and may break or be removed at any time.
 
 ## Extensions
 
