@@ -41,22 +41,67 @@ const arg = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : unde
 // ---------------------------------------------------------------------------
 // Discovering the current module
 
+// Plain HTTP first. Cloudflare challenges datacenter addresses (CI runners) with a 403, so on
+// a refusal everything is fetched from inside a real browser page that has been through the
+// site's check instead; FORCE_BROWSER_FETCH=1 skips straight to that.
+let siteFetcher = null;
+async function browserFetcher() {
+  const browser = await puppeteer.launch({
+    executablePath: findBrowser(),
+    headless: true,
+    args: ["--no-sandbox", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-blink-features=AutomationControlled"],
+  });
+  const page = await browser.newPage();
+  await page.setUserAgent(UA.replace("X11; Linux x86_64", "Windows NT 10.0; Win64; x64"));
+  await page.goto(`${SITE}/`, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+  const deadline = Date.now() + 60000;
+  for (;;) {
+    const title = await page.title().catch(() => "");
+    if (title && !/just a moment|checking|verify|attention required/i.test(title)) break;
+    if (Date.now() > deadline) {
+      await browser.close();
+      throw new Error(`the site's browser check did not clear (title: ${title || "none"})`);
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return {
+    async get(url) {
+      const r = await page.evaluate(async (u) => {
+        const res = await fetch(u);
+        return { status: res.status, text: await res.text() };
+      }, url);
+      if (r.status !== 200) throw new Error(`GET ${url} -> HTTP ${r.status} (in browser)`);
+      return r.text;
+    },
+    close: () => browser.close(),
+  };
+}
+
 async function getText(url) {
-  const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "*/*" } });
-  if (!res.ok) throw new Error(`GET ${url} -> HTTP ${res.status}`);
-  return res.text();
+  if (!siteFetcher && process.env.FORCE_BROWSER_FETCH !== "1") {
+    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "*/*" } });
+    if (res.ok) return res.text();
+    if (res.status !== 403 && res.status !== 503) throw new Error(`GET ${url} -> HTTP ${res.status}`);
+    console.log(`plain GET ${url} -> HTTP ${res.status}; retrying through a browser`);
+  }
+  siteFetcher ??= await browserFetcher();
+  return siteFetcher.get(url);
 }
 
 async function discoverSecure() {
-  const ping = JSON.parse(await getText(`${SITE}/ping?nocache=1`));
-  const home = await getText(`${SITE}/`);
-  const mainPath = /\/assets\/build\/[A-Za-z0-9_-]+\/dist\/main-[A-Za-z0-9_-]+\.js/.exec(home)?.[0];
-  if (!mainPath) throw new Error("main script not found in the home page");
-  const main = await getText(SITE + mainPath);
-  const secureName = /secure-[A-Za-z0-9_-]+\.js/.exec(main)?.[0];
-  if (!secureName) throw new Error("secure module not referenced by the main script");
-  const secureUrl = `${SITE}${mainPath.slice(0, mainPath.lastIndexOf("/") + 1)}${secureName}`;
-  return { build: ping.buildId, clientVersion: ping.clientVersion, url: secureUrl, source: await getText(secureUrl) };
+  try {
+    const ping = JSON.parse(await getText(`${SITE}/ping?nocache=1`));
+    const home = await getText(`${SITE}/`);
+    const mainPath = /\/assets\/build\/[A-Za-z0-9_-]+\/dist\/main-[A-Za-z0-9_-]+\.js/.exec(home)?.[0];
+    if (!mainPath) throw new Error("main script not found in the home page");
+    const main = await getText(SITE + mainPath);
+    const secureName = /secure-[A-Za-z0-9_-]+\.js/.exec(main)?.[0];
+    if (!secureName) throw new Error("secure module not referenced by the main script");
+    const secureUrl = `${SITE}${mainPath.slice(0, mainPath.lastIndexOf("/") + 1)}${secureName}`;
+    return { build: ping.buildId, clientVersion: ping.clientVersion, url: secureUrl, source: await getText(secureUrl) };
+  } finally {
+    await siteFetcher?.close();
+  }
 }
 
 // ---------------------------------------------------------------------------
