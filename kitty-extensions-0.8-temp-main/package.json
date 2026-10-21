@@ -1,0 +1,26 @@
+{
+  "name": "kittycatgit-extensions-0.8",
+  "private": true,
+  "description": "Paperback 0.8 extensions by kittycatgit.",
+  "scripts": {
+    "tsc": "tsc",
+    "lint": "oxlint --fix",
+    "lint:check": "oxlint --deny-warnings",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "conformance": "npm run tsc && npm run lint:check && npm run format:check",
+    "bundle": "paperback bundle && node tools/homepage.mjs",
+    "serve": "paperback serve",
+    "logcat": "paperback logcat",
+    "test": "paperback test"
+  },
+  "devDependencies": {
+    "@paperback/toolchain": "^0.8.7",
+    "@paperback/types": "^0.8.7",
+    "oxfmt": "^0.63.0",
+    "oxlint": "^1.78.0",
+    "typescript": "^5.9.2"
+  },
+  "baseURL": "https://kittycatgit.github.io/kitty-extensions-0.8",
+  "repositoryName": "kittycatgit Extensions (0.8)"
+}
