@@ -51,12 +51,12 @@ import {
 import { POPULAR_TAG_NAMES } from "./tags";
 
 export const KaganeInfo: SourceInfo = {
-  version: "5.0.0",
+  version: "5.0.1",
   name: "Kagane",
   icon: "icon.png",
   author: "kittycatgit",
   authorWebsite: "https://github.com/kittycatgit",
-  description: "Extension that pulls content from kagane.to.",
+  description: "Extension that pulls content from Kagane (kagane.si and mirrors).",
   contentRating: ContentRating.MATURE,
   websiteBaseURL: BASE_URL,
   language: "en",
@@ -471,15 +471,15 @@ export class Kagane
   }
 
   async getChapters(mangaId: string): Promise<Chapter[]> {
-    const [data, taxonomy] = await Promise.all([
+    const [data, taxonomy, books] = await Promise.all([
       this.api.fetchJSON<DetailsDto>(`${API_URL}/series/${mangaId}`),
       this.api.getTaxonomy().catch(() => ({ genres: [], sources: [] as SourceDto[] })),
+      this.api.getSeriesBooks(mangaId),
     ]);
 
     const source = taxonomy.sources.find((entry) => entry.source_id === data.source_id);
     // A star marks an official upload so they stand out from scanlations.
     const official = source?.source_type === "Official";
-    const books = data.series_books ?? [];
 
     if (books.length === 0) {
       throw new Error(`No chapters were listed for ${mangaId}.`);

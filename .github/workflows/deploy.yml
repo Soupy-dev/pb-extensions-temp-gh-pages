@@ -1,0 +1,55 @@
+name: Build and deploy extensions
+
+# Builds Kagane from its TypeScript source, assembles the combined Paperback
+# repository (Kagane + ComixTo) with tools/build-site.mjs, and publishes it to
+# GitHub Pages. Runs on every push to main and can be triggered by hand.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish; queue the newest without cancelling it midway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: kitty-extensions-0.8-temp-main/package-lock.json
+
+      - name: Build Kagane bundle
+        working-directory: kitty-extensions-0.8-temp-main
+        run: |
+          npm ci
+          npx paperback bundle
+
+      - name: Assemble combined repository
+        run: node tools/build-site.mjs
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

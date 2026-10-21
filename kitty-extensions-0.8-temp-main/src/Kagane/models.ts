@@ -1,4 +1,9 @@
-export const BASE_URL = "https://kagane.to";
+// The original kagane.to no longer resolves; the project now runs from a set of
+// interchangeable content mirrors (kagane.si / .cx / .moe / .net) that all serve
+// the same /api/v2. The kagane.org hub page is deliberately locked down harder
+// and refuses non-browser clients even on GETs, so a content mirror is the
+// default. If a mirror is ever retired, swap this host for another from the hub.
+export const BASE_URL = "https://kagane.si";
 export const API_URL = `${BASE_URL}/api/v2`;
 export const PAGE_SIZE = 35;
 
@@ -125,6 +130,15 @@ export interface ChapterBook {
   chapter_no?: string | null;
   volume_no?: string | null;
   groups?: Array<{ title: string }>;
+}
+
+// Chapters moved off the series payload: GET /api/v2/series/{id} no longer
+// carries `series_books`. They now come from GET /api/v2/series/{id}/books,
+// which pages 500 at a time and advances with `before=<next_cursor>`, where
+// next_cursor is the string "<sort_no>,<book_id>" (null/empty on the last page).
+export interface SeriesBooksDto {
+  items?: ChapterBook[];
+  next_cursor?: string | null;
 }
 
 export interface DetailsDto {

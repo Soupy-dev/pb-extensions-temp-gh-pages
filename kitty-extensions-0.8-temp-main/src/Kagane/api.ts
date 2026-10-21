@@ -8,8 +8,10 @@ import {
   INTEGRITY_EXP_KEY,
   INTEGRITY_TOKEN_KEY,
   type ChallengeDto,
+  type ChapterBook,
   type GenreDto,
   type IntegrityDto,
+  type SeriesBooksDto,
   type SourceDto,
   type TagDto,
 } from "./models";
@@ -106,6 +108,36 @@ export class KaganeApi {
       // fresh one is the difference between a working chapter and a dead one.
       return request(await this.integrityToken(true));
     }
+  }
+
+  // Chapters used to ride along on GET /series/{id}; that response dropped
+  // `series_books`, so the list is pulled from /series/{id}/books instead. The
+  // endpoint caps at 500 per call and advances with `before=<next_cursor>` (the
+  // string "<sort_no>,<book_id>"), so this walks the cursor to the end. The
+  // iteration cap is a guard against a cursor that never clears — 200 pages of
+  // 500 covers far more than any real series.
+  async getSeriesBooks(seriesId: string): Promise<ChapterBook[]> {
+    const all: ChapterBook[] = [];
+    let before: string | undefined;
+
+    for (let page = 0; page < 200; page += 1) {
+      const query = before
+        ? `?limit=500&before=${encodeURIComponent(before)}`
+        : "?limit=500";
+      const data = await this.fetchJSON<SeriesBooksDto>(
+        `${API_URL}/series/${seriesId}/books${query}`,
+      );
+      const items = data.items ?? [];
+      all.push(...items);
+
+      const cursor = data.next_cursor;
+      if (!cursor || items.length === 0) {
+        break;
+      }
+      before = cursor;
+    }
+
+    return all;
   }
 
   async getTaxonomy(): Promise<Taxonomy> {
