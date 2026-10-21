@@ -59,6 +59,10 @@ jobs:
           CHROME_PATH: /usr/bin/google-chrome
         run: node tools/comix-keys/extract.mjs --out extracted.json
 
+      - name: Flag a failed extraction
+        if: steps.extract.outcome == 'failure'
+        run: echo "::warning title=comix signer keys::extraction failed, so the previously published keys stay in place. Read the 'Extract the current signer constants' log; ComixTo stops working once comix retires those keys (about a day after its next rebuild)."
+
       - name: Choose what to publish
         id: select
         run: node tools/comix-keys/select.mjs --published published.json --extracted extracted.json --out keys/comix-keys.json
