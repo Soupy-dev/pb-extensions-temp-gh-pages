@@ -3,7 +3,7 @@ name: Build and deploy extensions
 # Builds Kagane from its TypeScript source, assembles the combined Paperback
 # repository (Kagane + ComixTo) with tools/build-site.mjs, and publishes it to
 # GitHub Pages. Runs on every push to main, can be triggered by hand, and runs
-# hourly to follow comix.to's signer rotation: comix rebuilds its request-signing
+# every three hours to follow comix.to's signer rotation: comix rebuilds its request-signing
 # module about every 14 hours and retires old keys after roughly one generation, so the
 # `keys` job extracts the current constants (tools/comix-keys) and the deploy publishes
 # them as comix-keys.json, which the ComixTo extension fetches at runtime. Scheduled
@@ -14,7 +14,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: "13 * * * *"
+    - cron: "13 */3 * * *"
 
 permissions:
   contents: read

@@ -59,16 +59,25 @@ ComixTo notes (measured against the live site, Oct 2026): comix answers every
 request of a session with `503 third_party_app` for several minutes once it sees
 chapter-list traffic no real reader produces. `GET /manga/{id}/chapters` must use
 `limit` ≤ 40 (50+ trips it on the next request) and at most 3 `page ≥ 2` requests per
-~35 s (the 4th trips it). Page 1, details, listings and chapter pages are not limited.
-`getChapters` therefore pages within that budget and keeps a per-title cache, so a very
-long series fills in over a few opens instead of tripping the block.
+~35 s (the 4th trips it). Page 1 — in either sort order, with or without `group_id` or
+`number` filters — details, listings and chapter pages are not limited.
+
+comix also keeps one chapter entry per scanlation group, so a 41-chapter series can have
+500+ entries. By default (setting "Merge Duplicate Chapters") `getChapters` therefore
+works from a single group's list: it probes the busiest groups' page 1 to find the one
+with the most chapters, takes that group's newest 40 plus oldest 40 (the whole list for
+up to 80 chapters with no budgeted request), pages the middle of longer lists within the
+page budget, and fills missing chapter numbers from other groups or by `number` lookup;
+progress is cached per title so a very long series completes over a few opens. With the
+setting off it lists every group's upload but can only reach the newest part of a long
+series.
 
 ComixTo signing keys: comix.to rebuilds its request-signing script about every 14
 hours with a new token prefix, HMAC key and response key, and answers `403 key_retired`
 for keys more than about one generation old. `tools/comix-keys/extract.mjs` recovers the
 current constants from the site's own script (it runs the script in headless Chromium and
 proves the result against the script's output before accepting it), the workflow runs it
-hourly, and the deploy publishes `comix-keys.json` next to the extensions. ComixTo fetches
+every three hours, and the deploy publishes `comix-keys.json` next to the extensions. ComixTo fetches
 that file at runtime and adopts it when its build is newer than the constants baked into
 the bundle, so a rotation needs no extension update. To run it by hand (needs
 Chrome/Chromium/Edge; set `CHROME_PATH` if it is not found):

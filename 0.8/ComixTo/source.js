@@ -833,47 +833,50 @@ var _Sources = (() => {
         l: chap.language || "en",
         v: chap.volume,
         g: chap.group?.name || "",
+        G: chap.groupId ?? chap.group?.id ?? -1,
         t: parseRelativeTime(chap.createdAtFormatted).getTime()
       };
     }
-    parseChapters(data, isFiltering, isWhitelist, isStrict, savedGroups) {
-      const chapters = [];
-      for (const chap of data) {
-        const groupName = chap.g;
-        if (isFiltering && savedGroups.length > 0) {
-          let matchFound = false;
-          const normalizedGroupName = normalizeString(groupName).toLowerCase();
-          for (const savedGroup of savedGroups) {
-            const normalizedSaved = normalizeString(savedGroup).toLowerCase();
-            if (isStrict) {
-              if (normalizedGroupName === normalizedSaved) {
-                matchFound = true;
-                break;
-              }
-            } else {
-              if (normalizedGroupName.includes(normalizedSaved)) {
-                matchFound = true;
-                break;
-              }
-            }
-          }
-          if (isWhitelist && !matchFound) continue;
-          if (!isWhitelist && matchFound) continue;
+    // The user's group filter (blacklist by default, whitelist when enabled).
+    isGroupAllowed(groupName, isFiltering, isWhitelist, isStrict, savedGroups) {
+      if (!isFiltering || savedGroups.length === 0) return true;
+      let matchFound = false;
+      const normalizedGroupName = normalizeString(groupName).toLowerCase();
+      for (const savedGroup of savedGroups) {
+        const normalizedSaved = normalizeString(savedGroup).toLowerCase();
+        if (isStrict ? normalizedGroupName === normalizedSaved : normalizedGroupName.includes(normalizedSaved)) {
+          matchFound = true;
+          break;
         }
-        chapters.push(
-          App.createChapter({
-            id: chap.i,
-            chapNum: chap.n,
-            name: chap.m ? `${chap.m}` : `Chapter ${chap.n}`,
-            langCode: chap.l,
-            volume: chap.v,
-            group: groupName,
-            time: new Date(chap.t),
-            sortingIndex: chap.n
-          })
-        );
       }
-      return chapters;
+      return isWhitelist ? matchFound : !matchFound;
+    }
+    // With `ranks` (group id -> preference, lower wins) the list is collapsed to one entry per
+    // chapter number: comix keeps a separate entry per scanlation group, so a 40-chapter series
+    // can have 500+ entries.
+    parseChapters(data, isFiltering, isWhitelist, isStrict, savedGroups, ranks) {
+      let kept = data.filter((chap) => this.isGroupAllowed(chap.g, isFiltering, isWhitelist, isStrict, savedGroups));
+      if (ranks) {
+        const rank = (chap) => ranks.get(chap.G) ?? 1e6;
+        const best = new Map();
+        for (const chap of kept) {
+          const cur = best.get(String(chap.n));
+          if (!cur || rank(chap) < rank(cur)) best.set(String(chap.n), chap);
+        }
+        kept = [...best.values()];
+      }
+      return kept.map(
+        (chap) => App.createChapter({
+          id: chap.i,
+          chapNum: chap.n,
+          name: chap.m ? `${chap.m}` : `Chapter ${chap.n}`,
+          langCode: chap.l,
+          volume: chap.v,
+          group: chap.g,
+          time: new Date(chap.t),
+          sortingIndex: chap.n
+        })
+      );
     }
     parseChapterDetails(data, mangaId, chapterId) {
       const baseUrl = data.pages.baseUrl ?? "";
@@ -1333,6 +1336,7 @@ var _Sources = (() => {
   var CHAPTER_MAX_WAIT_MS = 45e3;
   var THIRD_PARTY_COOLDOWN_MS = 12e4;
   var chapterPageHits = [];
+  var latestChapters = new Map();
   var thirdPartyBlock = null;
   var canSleep = typeof setTimeout === "function";
   var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1509,6 +1513,7 @@ var _Sources = (() => {
         await getUploaders(stateManager);
         await getSelectedUploaders(stateManager);
         await getUploaderInput(stateManager);
+        await getMergeDuplicates(stateManager);
       })();
     }
     return groupSettingsWarmUp;
@@ -1535,6 +1540,9 @@ var _Sources = (() => {
   };
   var getUploaderInput = async (stateManager) => {
     return await stateManager.retrieve("uploader_input") ?? "";
+  };
+  var getMergeDuplicates = async (stateManager) => {
+    return await stateManager.retrieve("merge_duplicate_chapters") ?? true;
   };
   var USER_AGENT_DEFAULT_ID = "default";
   var USER_AGENT_PRESETS = [
@@ -1686,6 +1694,22 @@ var _Sources = (() => {
         sections: async () => {
           await warmUpGroupSettings(stateManager);
           return keepAlive([
+            App.createDUISection({
+              id: "duplicate_settings",
+              header: "Duplicate Chapters",
+              footer: "comix lists every scanlation group's upload of a chapter separately (a 40-chapter series can have 500+ entries) and limits how fast chapter lists can be read. On, each chapter number appears once, taken from the group that has the most chapters, and long series load far faster. Off, every group's upload is listed, but only the newest part of a long series can be fetched.",
+              isHidden: false,
+              rows: async () => keepAlive([
+                App.createDUISwitch({
+                  id: "merge_duplicate_chapters",
+                  label: "Merge Duplicate Chapters",
+                  value: App.createDUIBinding({
+                    get: async () => await getMergeDuplicates(stateManager),
+                    set: async (newValue) => await stateManager.store("merge_duplicate_chapters", newValue)
+                  })
+                })
+              ])
+            }),
             App.createDUISection({
               id: "filtering_settings",
               header: "Filtering Settings",
@@ -2199,7 +2223,7 @@ var _Sources = (() => {
     return /^https?:\/\/([^/]+\.)?comix\.to(\/|$|\?|#)/i.test(url ?? "");
   }
   var ComixToInfo = {
-    version: "1.9.32",
+    version: "1.9.33",
     name: "ComixTo",
     icon: "icon.png",
     author: "acepilot147",
@@ -2355,32 +2379,204 @@ var _Sources = (() => {
         "manga_details",
         `${API_BASE}/manga/${mangaId}?includes[]=author&includes[]=artist`
       );
+      latestChapters.set(mangaId, { value: Number(result.latestChapter) || 0, at: Date.now() });
       return this.parser.parseMangaDetails(result, mangaId);
     }
-    chapterListUrl(mangaId, page) {
-      return `${API_BASE}/manga/${mangaId}/chapters?page=${page}&limit=${CHAPTER_PAGE_SIZE}&order[number]=desc`;
-    }
-    async loadChapterCache(mangaId) {
+    // Highest chapter number of a title, remembered from its details (or asked for): the merged
+    // chapter list uses it to tell whether the group it picked covers the whole series.
+    async latestChapterOf(mangaId) {
+      const hit = latestChapters.get(mangaId);
+      if (hit && Date.now() - hit.at < 6e5) return hit.value;
       try {
-        const raw = await this.stateManager.retrieve(`chapters_v2_${mangaId}`);
-        const rows = raw ? JSON.parse(raw) : [];
-        return Array.isArray(rows) ? rows : [];
-      } catch {
-        return [];
+        const result = await this.fetchTimed("manga_latest", `${API_BASE}/manga/${mangaId}`);
+        const value = Number(result.latestChapter) || 0;
+        latestChapters.set(mangaId, { value, at: Date.now() });
+        return value;
+      } catch (err) {
+        if (err?.comixBlocked) throw err;
+        return 0;
       }
     }
-    async saveChapterCache(mangaId, rows) {
+    chapterListUrl(mangaId, page, order = "desc") {
+      return `${API_BASE}/manga/${mangaId}/chapters?page=${page}&limit=${CHAPTER_PAGE_SIZE}&order[number]=${order}`;
+    }
+    async loadChapterCache(mangaId, version = 2) {
       try {
-        await this.stateManager.store(`chapters_v2_${mangaId}`, JSON.stringify(rows));
+        const raw = await this.stateManager.retrieve(`chapters_v${version}_${mangaId}`);
+        const value = raw ? JSON.parse(raw) : null;
+        if (version === 2) return Array.isArray(value) ? value : [];
+        return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+      } catch {
+        return version === 2 ? [] : null;
+      }
+    }
+    async saveChapterCache(mangaId, value, version = 2) {
+      try {
+        await this.stateManager.store(`chapters_v${version}_${mangaId}`, JSON.stringify(value));
       } catch {
       }
+    }
+    async getChapters(mangaId) {
+      return await getMergeDuplicates(this.stateManager) ? this.getChaptersMerged(mangaId) : this.getChaptersAllGroups(mangaId);
+    }
+    // One entry per chapter number. A single group's list is nearly always complete (the
+    // best group of a 41-chapter title with 17 groups has 41), and page 1 of any list - with or
+    // without a group filter, newest first or oldest first - is not rate limited, so: probe the
+    // busiest groups' page 1 to pick the one with the most chapters, take that group's newest 40
+    // and oldest 40 (together the whole list for up to 80 chapters, with no budgeted request),
+    // page through the middle of longer lists within the page budget, then fill chapter numbers
+    // it lacks from other groups and, last, by number lookup.
+    async getChaptersMerged(mangaId) {
+      const [isFiltering, isWhitelist, isStrict, savedGroups] = await Promise.all([
+        getUploadersFiltering(this.stateManager),
+        getUploadersWhitelisted(this.stateManager),
+        getStrictNameMatching(this.stateManager),
+        getUploaders(this.stateManager)
+      ]);
+      const allowed = (name) => this.parser.isGroupAllowed(name, isFiltering, isWhitelist, isStrict, savedGroups);
+      const sig = JSON.stringify([isFiltering, isWhitelist, isStrict, savedGroups]);
+      const latest = Math.floor(await this.latestChapterOf(mangaId));
+      const listUrl = (page, extra = "") => this.chapterListUrl(mangaId, page) + extra;
+      const fetchList = (page, extra) => fetchSigned(this.requestManager, listUrl(page, extra));
+
+      const first = await fetchList(1);
+      const total = first.meta?.total ?? first.items.length;
+      const rows = new Map();
+      const addItems = (items) => {
+        let added = 0;
+        for (const item of items) {
+          const row = this.parser.toChapterRow(item);
+          if (!rows.has(row.i)) {
+            rows.set(row.i, row);
+            added++;
+          }
+        }
+        return added;
+      };
+      addItems(first.items);
+
+      let order = [];
+      if (total > CHAPTER_PAGE_SIZE) {
+        const cache = await this.loadChapterCache(mangaId, 3);
+        const cached = cache && cache.v === 3 ? cache : null;
+        const sameFilter = cached?.sig === sig;
+        let primary = sameFilter ? cached.primary : null;
+        order = sameFilter ? [...cached.order] : [];
+        const tried = new Set(sameFilter ? cached.tried : []);
+        const probed = new Map();
+        const groupFirstPage = async (gid) => {
+          if (!probed.has(gid)) {
+            const r = await fetchList(1, `&group_id=${gid}`);
+            addItems(r.items);
+            probed.set(gid, { total: r.meta?.total ?? r.items.length, lastPage: r.meta?.lastPage ?? 1 });
+          }
+          return probed.get(gid);
+        };
+
+        // Groups worth trying, busiest in the newest releases first, minus filtered-out ones.
+        const freq = new Map();
+        for (const item of first.items) {
+          if (item.groupId != null && allowed(item.group?.name ?? "")) freq.set(item.groupId, (freq.get(item.groupId) ?? 0) + 1);
+        }
+        const candidates = [...freq.keys()].sort((a, b) => freq.get(b) - freq.get(a));
+        if (isFiltering && (primary == null || candidates.length === 0)) {
+          try {
+            const groups = await fetchSigned(this.requestManager, `${API_BASE}/manga/${mangaId}/groups`);
+            for (const g of groups.items ?? []) {
+              if (!candidates.includes(g.id) && allowed(g.name ?? "")) candidates.push(g.id);
+            }
+          } catch (err) {
+            if (err?.comixBlocked) throw err;
+          }
+        }
+        const enough = (info) => latest > 0 ? info.total >= latest * 0.9 : true;
+        if (primary == null) {
+          let best = null;
+          for (const gid of candidates.slice(0, 4)) {
+            const info = await groupFirstPage(gid);
+            if (!best || info.total > best.total) best = { gid, total: info.total };
+            if (enough(info)) break;
+          }
+          primary = best ? best.gid : null;
+          if (primary != null) order = [primary, ...[...probed.keys()].filter((g) => g !== primary)];
+        }
+
+        if (primary != null) {
+          const info = await groupFirstPage(primary);
+          const cachedRows = cached?.rows ?? [];
+          // The cached copy of the primary group's list only continues from page 1 if the two overlap
+          // (otherwise more than a page of chapters appeared since it was saved: start over).
+          const overlaps = cachedRows.some((r) => r.G === primary && rows.has(r.i));
+          for (const r of cachedRows) {
+            if (!rows.has(r.i) && (r.G !== primary || overlaps)) rows.set(r.i, r);
+          }
+          // Newest 40 came with page 1; the oldest 40 cover the far end of the list for free.
+          if (info.total > CHAPTER_PAGE_SIZE) addItems((await fetchSigned(this.requestManager, this.chapterListUrl(mangaId, 1, "asc") + `&group_id=${primary}`)).items);
+          // descCount: how many of the newest entries are held contiguously. A cached run continues
+          // from page 1 shifted down by the chapters added since it was saved.
+          const grew = Math.max(0, info.total - (cached?.total ?? info.total));
+          let descCount = Math.min(info.total, CHAPTER_PAGE_SIZE);
+          if (overlaps) descCount = Math.min(info.total, Math.max(descCount, grew + (cached.descCount ?? 0)));
+          const need = info.total > CHAPTER_PAGE_SIZE ? info.total - CHAPTER_PAGE_SIZE : info.total;
+          const deadline = Date.now() + CHAPTER_MAX_WAIT_MS;
+          let blocked = null;
+          while (descCount < need) {
+            const page = Math.floor(descCount / CHAPTER_PAGE_SIZE) + 1;
+            if (page > info.lastPage) break;
+            if (!await acquireChapterPageSlot(deadline)) break;
+            try {
+              const items = (await fetchList(page, `&group_id=${primary}`)).items;
+              if (items.length === 0) break;
+              addItems(items);
+              descCount = Math.min(info.total, CHAPTER_PAGE_SIZE * page);
+            } catch (err) {
+              if (err?.comixBlocked) blocked = err;
+              console.log(`[ComixTo] chapter page ${page} of ${mangaId} failed: ${err?.message ?? err}`);
+              break;
+            }
+          }
+          const primaryComplete = descCount >= need;
+
+          // Chapter numbers the primary group lacks: other groups' newest page, then a lookup by number.
+          // Only once its own list is complete - until then "missing" mostly means "not paged yet".
+          const missingNumbers = () => {
+            const have = new Set();
+            for (const r of rows.values()) if (allowed(r.g)) have.add(r.n);
+            const out = [];
+            for (let n = latest; n >= 1; n--) if (!have.has(n) && !tried.has(n)) out.push(n);
+            return out;
+          };
+          if (latest > 0 && !blocked && primaryComplete) {
+            try {
+              for (const gid of candidates.filter((g) => !probed.has(g)).slice(0, 3)) {
+                if (missingNumbers().length === 0) break;
+                await groupFirstPage(gid);
+                order.push(gid);
+              }
+              for (const n of missingNumbers().slice(0, 4)) {
+                tried.add(n);
+                addItems((await fetchList(1, `&number=${n}`)).items);
+              }
+            } catch (err) {
+              if (err?.comixBlocked) blocked = err;
+              console.log(`[ComixTo] filling chapter gaps of ${mangaId} failed: ${err?.message ?? err}`);
+            }
+          }
+          await this.saveChapterCache(mangaId, { v: 3, sig, primary, order, total: info.total, descCount, tried: [...tried], rows: [...rows.values()] }, 3);
+          if (blocked) throw blocked;
+        }
+      }
+
+      const ranks = new Map(order.map((gid, i) => [gid, i]));
+      const parsed = this.parser.parseChapters([...rows.values()], isFiltering, isWhitelist, isStrict, savedGroups, ranks);
+      return parsed.sort((a, b) => b.chapNum - a.chapNum);
     }
     // Page 1 is always fetched fresh (it is not rate limited and carries the newest
     // chapters). Older pages are the rate-limited ones, so they are fetched a few at a
     // time (see acquireChapterPageSlot) and kept in a per-title cache; a title with more
     // chapters than one call may fetch fills in over the next calls instead of tripping
     // comix's block.
-    async getChapters(mangaId) {
+    async getChaptersAllGroups(mangaId) {
       const first = await fetchSigned(this.requestManager, this.chapterListUrl(mangaId, 1));
       const total = first.meta?.total ?? first.items.length;
       const lastPage = first.meta?.lastPage ?? 1;
