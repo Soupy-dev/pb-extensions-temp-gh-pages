@@ -55,6 +55,14 @@ Layout:
   (merged `versioning.json`, per-source `source.js` + `includes/`, and the
   landing page).
 
+ComixTo notes (measured against the live site, Oct 2026): comix answers every
+request of a session with `503 third_party_app` for several minutes once it sees
+chapter-list traffic no real reader produces. `GET /manga/{id}/chapters` must use
+`limit` ≤ 40 (50+ trips it on the next request) and at most 3 `page ≥ 2` requests per
+~35 s (the 4th trips it). Page 1, details, listings and chapter pages are not limited.
+`getChapters` therefore pages within that budget and keeps a per-title cache, so a very
+long series fills in over a few opens instead of tripping the block.
+
 Build and preview locally:
 
 ```sh

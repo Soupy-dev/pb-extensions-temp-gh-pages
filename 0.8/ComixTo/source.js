@@ -823,10 +823,23 @@ var _Sources = (() => {
         })
       });
     }
+    // Compact, cacheable form of one API chapter. `t` is resolved to an absolute time up
+    // front because the API only gives a relative "3d ago" string.
+    toChapterRow(chap) {
+      return {
+        i: chap.id.toString(),
+        n: chap.number,
+        m: chap.name || "",
+        l: chap.language || "en",
+        v: chap.volume,
+        g: chap.group?.name || "",
+        t: parseRelativeTime(chap.createdAtFormatted).getTime()
+      };
+    }
     parseChapters(data, isFiltering, isWhitelist, isStrict, savedGroups) {
       const chapters = [];
       for (const chap of data) {
-        const groupName = chap.group?.name || "";
+        const groupName = chap.g;
         if (isFiltering && savedGroups.length > 0) {
           let matchFound = false;
           const normalizedGroupName = normalizeString(groupName).toLowerCase();
@@ -849,14 +862,14 @@ var _Sources = (() => {
         }
         chapters.push(
           App.createChapter({
-            id: chap.id.toString(),
-            chapNum: chap.number,
-            name: chap.name ? `${chap.name}` : `Chapter ${chap.number}`,
-            langCode: chap.language || "en",
-            volume: chap.volume,
+            id: chap.i,
+            chapNum: chap.n,
+            name: chap.m ? `${chap.m}` : `Chapter ${chap.n}`,
+            langCode: chap.l,
+            volume: chap.v,
             group: groupName,
-            time: parseRelativeTime(chap.createdAtFormatted),
-            sortingIndex: chap.number
+            time: new Date(chap.t),
+            sortingIndex: chap.n
           })
         );
       }
@@ -1283,9 +1296,82 @@ var _Sources = (() => {
     const canonical = canonicalizeQuery(url.slice(qIdx + 1));
     return canonical ? `${base}?${canonical}&_=${token}` : `${base}?_=${token}`;
   }
+  // comix flags a session as a "third_party_app" (HTTP 503 on everything, minutes-long)
+  // when it sees chapter-list traffic no real reader produces. Measured against the live
+  // site: `limit` above 40 on /manga/{id}/chapters trips it on the next request, and so do
+  // more than 3-4 page>=2 chapter-list requests inside ~30s. Page 1 and everything else
+  // (details, listings, chapter pages) are not limited. Stay under both with a margin.
+  var CHAPTER_PAGE_SIZE = 40;
+  var CHAPTER_BURST = 3;
+  var CHAPTER_WINDOW_MS = 35e3;
+  var CHAPTER_MAX_WAIT_MS = 45e3;
+  var THIRD_PARTY_COOLDOWN_MS = 12e4;
+  var chapterPageHits = [];
+  var thirdPartyBlock = null;
+  var canSleep = typeof setTimeout === "function";
+  var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  function chapterPageWaitMs() {
+    const now = Date.now();
+    chapterPageHits = chapterPageHits.filter((t) => now - t < CHAPTER_WINDOW_MS);
+    if (chapterPageHits.length < CHAPTER_BURST) return 0;
+    return CHAPTER_WINDOW_MS - (now - chapterPageHits[chapterPageHits.length - CHAPTER_BURST]) + 500;
+  }
+  // Reserves one page>=2 chapter-list request. Waits for a free slot when a timer is
+  // available, but never past `deadline`; returns false when the caller should stop
+  // paging and settle for what it has (the rest is picked up on a later call).
+  async function acquireChapterPageSlot(deadline) {
+    for (; ; ) {
+      const wait = chapterPageWaitMs();
+      if (wait === 0) {
+        chapterPageHits.push(Date.now());
+        return true;
+      }
+      if (!canSleep || Date.now() + wait > deadline) return false;
+      await sleep(wait);
+    }
+  }
+  function comixSessionCookie(requestManager) {
+    try {
+      const cookie = requestManager?.cookieStore?.getAllCookies()?.find((c) => c.name === "session" && c.domain.replace(/^\./, "").endsWith("comix.to"));
+      return cookie ? cookie.value : null;
+    } catch {
+      return null;
+    }
+  }
+  var THIRD_PARTY_MESSAGE = "comix.to has temporarily blocked this session for unusual traffic (third_party_app). Wait a few minutes, or complete the cloud-button check again to start a fresh session, then retry.";
+  function assertNotThirdPartyBlocked(requestManager) {
+    if (!thirdPartyBlock) return;
+    if (Date.now() >= thirdPartyBlock.until || comixSessionCookie(requestManager) !== thirdPartyBlock.session) {
+      thirdPartyBlock = null;
+      return;
+    }
+    const err = new Error(`${THIRD_PARTY_MESSAGE} (Requests are paused for a couple of minutes so the block is not extended.)`);
+    err.comixBlocked = true;
+    throw err;
+  }
+  function throwIfThirdPartyBlock(response, requestManager) {
+    if (response.status !== 503 || !(response.data ?? "").includes("third_party_app")) return;
+    thirdPartyBlock = { until: Date.now() + THIRD_PARTY_COOLDOWN_MS, session: comixSessionCookie(requestManager) };
+    const err = new Error(THIRD_PARTY_MESSAGE);
+    err.comixBlocked = true;
+    throw err;
+  }
+  function throwIfSignatureRejected(response) {
+    if (response.status !== 403) return;
+    const data = response.data ?? "";
+    if (data.includes("key_retired")) {
+      throw new Error("comix.to retired the request-signing key this extension uses (key_retired). The extension needs an update.");
+    }
+    if (data.includes("invalid_token")) {
+      throw new Error("comix.to rejected the request signature (invalid_token). The signing key may have rotated; the extension may need an update.");
+    }
+  }
   var comixQueue = Promise.resolve();
   function scheduleComix(requestManager, request) {
-    const run = comixQueue.then(() => requestManager.schedule(request, 1));
+    const run = comixQueue.then(() => {
+      assertNotThirdPartyBlocked(requestManager);
+      return requestManager.schedule(request, 1);
+    });
     comixQueue = run.catch(() => void 0);
     return run;
   }
@@ -1339,6 +1425,8 @@ var _Sources = (() => {
   }
   function checkSignedResponseError(response, requestManager) {
     throwIfSecurityCheck(response, requestManager);
+    throwIfThirdPartyBlock(response, requestManager);
+    throwIfSignatureRejected(response);
     const data = response.data ?? "";
     const preview = data.substring(0, 200).replace(/\s+/g, " ");
     const headers = response.headers ?? {};
@@ -2111,7 +2199,7 @@ var _Sources = (() => {
     return /^https?:\/\/([^/]+\.)?comix\.to(\/|$|\?|#)/i.test(url ?? "");
   }
   var ComixToInfo = {
-    version: "1.9.31",
+    version: "1.9.32",
     name: "ComixTo",
     icon: "icon.png",
     author: "acepilot147",
@@ -2288,16 +2376,68 @@ var _Sources = (() => {
       );
       return this.parser.parseMangaDetails(result, mangaId);
     }
+    chapterListUrl(mangaId, page) {
+      return `${API_BASE}/manga/${mangaId}/chapters?page=${page}&limit=${CHAPTER_PAGE_SIZE}&order[number]=desc`;
+    }
+    async loadChapterCache(mangaId) {
+      try {
+        const raw = await this.stateManager.retrieve(`chapters_v2_${mangaId}`);
+        const rows = raw ? JSON.parse(raw) : [];
+        return Array.isArray(rows) ? rows : [];
+      } catch {
+        return [];
+      }
+    }
+    async saveChapterCache(mangaId, rows) {
+      try {
+        await this.stateManager.store(`chapters_v2_${mangaId}`, JSON.stringify(rows));
+      } catch {
+      }
+    }
+    // Page 1 is always fetched fresh (it is not rate limited and carries the newest
+    // chapters). Older pages are the rate-limited ones, so they are fetched a few at a
+    // time (see acquireChapterPageSlot) and kept in a per-title cache; a title with more
+    // chapters than one call may fetch fills in over the next calls instead of tripping
+    // comix's block.
     async getChapters(mangaId) {
-      const fetchPage = (page) => fetchSigned(
-        this.requestManager,
-        `${API_BASE}/manga/${mangaId}/chapters?page=${page}&limit=100&order[number]=desc`
-      );
-      const firstResult = await fetchPage(1);
-      const lastPage = firstResult.meta?.lastPage ?? 1;
-      const chapters = [...firstResult.items];
-      for (let page = 2; page <= lastPage; page++) {
-        chapters.push(...(await fetchPage(page)).items);
+      const first = await fetchSigned(this.requestManager, this.chapterListUrl(mangaId, 1));
+      const total = first.meta?.total ?? first.items.length;
+      const lastPage = first.meta?.lastPage ?? 1;
+      const rows = new Map(first.items.map((c) => {
+        const row = this.parser.toChapterRow(c);
+        return [row.i, row];
+      }));
+      if (lastPage > 1) {
+        const cached = await this.loadChapterCache(mangaId);
+        if (cached.some((r) => rows.has(r.i))) {
+          for (const r of cached) if (!rows.has(r.i)) rows.set(r.i, r);
+        }
+        const deadline = Date.now() + CHAPTER_MAX_WAIT_MS;
+        let blocked = null;
+        while (rows.size < total) {
+          const page = Math.floor(rows.size / CHAPTER_PAGE_SIZE) + 1;
+          if (page > lastPage) break;
+          if (!await acquireChapterPageSlot(deadline)) break;
+          let result;
+          try {
+            result = await fetchSigned(this.requestManager, this.chapterListUrl(mangaId, page));
+          } catch (err) {
+            if (err?.comixBlocked) blocked = err;
+            console.log(`[ComixTo] chapter page ${page} of ${mangaId} failed: ${err?.message ?? err}`);
+            break;
+          }
+          let added = 0;
+          for (const c of result.items) {
+            const row = this.parser.toChapterRow(c);
+            if (!rows.has(row.i)) {
+              rows.set(row.i, row);
+              added++;
+            }
+          }
+          if (added === 0) break;
+        }
+        await this.saveChapterCache(mangaId, [...rows.values()]);
+        if (blocked) throw blocked;
       }
       const [isFiltering, isWhitelist, isStrict, savedGroups] = await Promise.all([
         getUploadersFiltering(this.stateManager),
@@ -2305,8 +2445,8 @@ var _Sources = (() => {
         getStrictNameMatching(this.stateManager),
         getUploaders(this.stateManager)
       ]);
-      const parsed = this.parser.parseChapters(chapters, isFiltering, isWhitelist, isStrict, savedGroups);
-      return parsed;
+      const parsed = this.parser.parseChapters([...rows.values()], isFiltering, isWhitelist, isStrict, savedGroups);
+      return parsed.sort((a, b) => b.chapNum - a.chapNum);
     }
     async getChapterDetails(mangaId, chapterId) {
       const result = await fetchSigned(
@@ -2598,6 +2738,8 @@ var _Sources = (() => {
       const reqUrl = response.request?.url ?? "?";
       const ctx = `status=${response.status} ct=${ct} server=${server} cf-ray=${cfRay} url=${reqUrl} preview="${preview}"`;
       throwIfSecurityCheck(response, this.requestManager);
+      throwIfThirdPartyBlock(response, this.requestManager);
+      throwIfSignatureRejected(response);
       if (response.status < 200 || response.status >= 300) {
         throw new Error(`HTTP ${response.status}: Unexpected response from server [${ctx}]`);
       }
